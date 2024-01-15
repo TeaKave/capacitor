@@ -10,8 +10,11 @@ import static com.getcapacitor.FileUtils.readFileFromAssets;
 import android.content.Context;
 import android.content.pm.ApplicationInfo;
 import android.content.res.AssetManager;
+
 import androidx.annotation.Nullable;
+
 import com.getcapacitor.util.JSONUtils;
+
 import java.io.File;
 import java.io.IOException;
 import java.util.Arrays;
@@ -20,6 +23,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -31,6 +35,9 @@ public class CapConfig {
     private static final String LOG_BEHAVIOR_NONE = "none";
     private static final String LOG_BEHAVIOR_DEBUG = "debug";
     private static final String LOG_BEHAVIOR_PRODUCTION = "production";
+    private static final String MIGRATION_CONFIG = "migrationConfig";
+    private static final String CONFIG_FILE_NAME = "configFileName";
+    private static final String CONFIG_FILE_DEFAULT = "old.capacitor.config.json";
 
     // Server Config
     private boolean html5mode = true;
@@ -65,16 +72,17 @@ public class CapConfig {
     /**
      * Constructs an empty config file.
      */
-    private CapConfig() {}
+    private CapConfig() {
+    }
 
     /**
      * Get an instance of the Config file object.
+     *
+     * @param assetManager The AssetManager used to load the config file
+     * @param config       JSON describing a configuration to use
      * @deprecated use {@link #loadDefault(Context)} to load an instance of the Config object
      * from the capacitor.config.json file, or use the {@link CapConfig.Builder} to construct
      * a CapConfig for embedded use.
-     *
-     * @param assetManager The AssetManager used to load the config file
-     * @param config JSON describing a configuration to use
      */
     @Deprecated
     public CapConfig(AssetManager assetManager, JSONObject config) {
@@ -82,7 +90,7 @@ public class CapConfig {
             this.configJSON = config;
         } else {
             // Load the capacitor.config.json
-            loadConfigFromAssets(assetManager, null);
+            loadConfigFromAssets(assetManager, null, null);
         }
 
         deserializeConfig(null);
@@ -102,7 +110,8 @@ public class CapConfig {
             return config;
         }
 
-        config.loadConfigFromAssets(context.getAssets(), null);
+        String configFileName = context.getSharedPreferences(MIGRATION_CONFIG, Context.MODE_PRIVATE).getString(CONFIG_FILE_NAME, CONFIG_FILE_DEFAULT);
+        config.loadConfigFromAssets(context.getAssets(), null, configFileName);
         config.deserializeConfig(context);
         return config;
     }
@@ -111,7 +120,7 @@ public class CapConfig {
      * Constructs a Capacitor Configuration from config.json file within the app assets.
      *
      * @param context The context.
-     * @param path A path relative to the root assets directory.
+     * @param path    A path relative to the root assets directory.
      * @return A loaded config file, if successful.
      */
     public static CapConfig loadFromAssets(Context context, String path) {
@@ -122,7 +131,8 @@ public class CapConfig {
             return config;
         }
 
-        config.loadConfigFromAssets(context.getAssets(), path);
+        String configFileName = context.getSharedPreferences(MIGRATION_CONFIG, Context.MODE_PRIVATE).getString(CONFIG_FILE_NAME, CONFIG_FILE_DEFAULT);
+        config.loadConfigFromAssets(context.getAssets(), path, configFileName);
         config.deserializeConfig(context);
         return config;
     }
@@ -131,7 +141,7 @@ public class CapConfig {
      * Constructs a Capacitor Configuration from config.json file within the app file-space.
      *
      * @param context The context.
-     * @param path A path relative to the root of the app file-space.
+     * @param path    A path relative to the root of the app file-space.
      * @return A loaded config file, if successful.
      */
     public static CapConfig loadFromFile(Context context, String path) {
@@ -142,7 +152,8 @@ public class CapConfig {
             return config;
         }
 
-        config.loadConfigFromFile(path);
+        String configFileName = context.getSharedPreferences(MIGRATION_CONFIG, Context.MODE_PRIVATE).getString(CONFIG_FILE_NAME, CONFIG_FILE_DEFAULT);
+        config.loadConfigFromFile(path, configFileName);
         config.deserializeConfig(context);
         return config;
     }
@@ -189,7 +200,7 @@ public class CapConfig {
      * Loads a Capacitor Configuration JSON file into a Capacitor Configuration object.
      * An optional path string can be provided to look for the config in a subdirectory path.
      */
-    private void loadConfigFromAssets(AssetManager assetManager, String path) {
+    private void loadConfigFromAssets(AssetManager assetManager, String path, @Nullable String fileName) {
         if (path == null) {
             path = "";
         } else {
@@ -200,7 +211,11 @@ public class CapConfig {
         }
 
         try {
-            String jsonString = readFileFromAssets(assetManager, path + "capacitor.config.json");
+            String configFileName = "capacitor.config.json";
+            if (fileName != null) {
+                configFileName = fileName;
+            }
+            String jsonString = readFileFromAssets(assetManager, path + configFileName);
             configJSON = new JSONObject(jsonString);
         } catch (IOException ex) {
             Logger.error("Unable to load capacitor.config.json. Run npx cap copy first", ex);
@@ -213,7 +228,7 @@ public class CapConfig {
      * Loads a Capacitor Configuration JSON file into a Capacitor Configuration object.
      * An optional path string can be provided to look for the config in a subdirectory path.
      */
-    private void loadConfigFromFile(String path) {
+    private void loadConfigFromFile(String path, @Nullable String fileName) {
         if (path == null) {
             path = "";
         } else {
@@ -224,7 +239,11 @@ public class CapConfig {
         }
 
         try {
-            File configFile = new File(path + "capacitor.config.json");
+            String configFileName = "capacitor.config.json";
+            if (fileName != null) {
+                configFileName = fileName;
+            }
+            File configFile = new File(path + configFileName);
             String jsonString = FileUtils.readFileFromDisk(configFile);
             configJSON = new JSONObject(jsonString);
         } catch (JSONException ex) {
@@ -255,17 +274,17 @@ public class CapConfig {
 
         // Android
         overriddenUserAgentString =
-            JSONUtils.getString(configJSON, "android.overrideUserAgent", JSONUtils.getString(configJSON, "overrideUserAgent", null));
+                JSONUtils.getString(configJSON, "android.overrideUserAgent", JSONUtils.getString(configJSON, "overrideUserAgent", null));
         appendedUserAgentString =
-            JSONUtils.getString(configJSON, "android.appendUserAgent", JSONUtils.getString(configJSON, "appendUserAgent", null));
+                JSONUtils.getString(configJSON, "android.appendUserAgent", JSONUtils.getString(configJSON, "appendUserAgent", null));
         backgroundColor =
-            JSONUtils.getString(configJSON, "android.backgroundColor", JSONUtils.getString(configJSON, "backgroundColor", null));
+                JSONUtils.getString(configJSON, "android.backgroundColor", JSONUtils.getString(configJSON, "backgroundColor", null));
         allowMixedContent =
-            JSONUtils.getBoolean(
-                configJSON,
-                "android.allowMixedContent",
-                JSONUtils.getBoolean(configJSON, "allowMixedContent", allowMixedContent)
-            );
+                JSONUtils.getBoolean(
+                        configJSON,
+                        "android.allowMixedContent",
+                        JSONUtils.getBoolean(configJSON, "allowMixedContent", allowMixedContent)
+                );
         minWebViewVersion = JSONUtils.getInt(configJSON, "android.minWebViewVersion", DEFAULT_ANDROID_WEBVIEW_VERSION);
         minHuaweiWebViewVersion = JSONUtils.getInt(configJSON, "android.minHuaweiWebViewVersion", DEFAULT_HUAWEI_WEBVIEW_VERSION);
         captureInput = JSONUtils.getBoolean(configJSON, "android.captureInput", captureInput);
@@ -273,9 +292,9 @@ public class CapConfig {
         webContentsDebuggingEnabled = JSONUtils.getBoolean(configJSON, "android.webContentsDebuggingEnabled", isDebug);
 
         String logBehavior = JSONUtils.getString(
-            configJSON,
-            "android.loggingBehavior",
-            JSONUtils.getString(configJSON, "loggingBehavior", LOG_BEHAVIOR_DEBUG)
+                configJSON,
+                "android.loggingBehavior",
+                JSONUtils.getString(configJSON, "loggingBehavior", LOG_BEHAVIOR_DEBUG)
         );
         switch (logBehavior.toLowerCase(Locale.ROOT)) {
             case LOG_BEHAVIOR_PRODUCTION:
@@ -318,6 +337,10 @@ public class CapConfig {
 
     public String getHostname() {
         return hostname;
+    }
+
+    public void setHostName(String hostname) {
+        this.hostname = hostname;
     }
 
     public String getStartPath() {
@@ -397,27 +420,28 @@ public class CapConfig {
 
     /**
      * Get a JSON object value from the Capacitor config.
-     * @deprecated use {@link PluginConfig#getObject(String)}  to access plugin config values.
-     * For main Capacitor config values, use the appropriate getter.
      *
      * @param key A key to fetch from the config
      * @return The value from the config, if exists. Null if not
+     * @deprecated use {@link PluginConfig#getObject(String)}  to access plugin config values.
+     * For main Capacitor config values, use the appropriate getter.
      */
     @Deprecated
     public JSONObject getObject(String key) {
         try {
             return configJSON.getJSONObject(key);
-        } catch (Exception ex) {}
+        } catch (Exception ex) {
+        }
         return null;
     }
 
     /**
      * Get a string value from the Capacitor config.
-     * @deprecated use {@link PluginConfig#getString(String, String)} to access plugin config
-     * values. For main Capacitor config values, use the appropriate getter.
      *
      * @param key A key to fetch from the config
      * @return The value from the config, if exists. Null if not
+     * @deprecated use {@link PluginConfig#getString(String, String)} to access plugin config
+     * values. For main Capacitor config values, use the appropriate getter.
      */
     @Deprecated
     public String getString(String key) {
@@ -426,12 +450,12 @@ public class CapConfig {
 
     /**
      * Get a string value from the Capacitor config.
-     * @deprecated use {@link PluginConfig#getString(String, String)} to access plugin config
-     * values. For main Capacitor config values, use the appropriate getter.
      *
-     * @param key A key to fetch from the config
+     * @param key          A key to fetch from the config
      * @param defaultValue A default value to return if the key does not exist in the config
      * @return The value from the config, if key exists. Default value returned if not
+     * @deprecated use {@link PluginConfig#getString(String, String)} to access plugin config
+     * values. For main Capacitor config values, use the appropriate getter.
      */
     @Deprecated
     public String getString(String key, String defaultValue) {
@@ -440,12 +464,12 @@ public class CapConfig {
 
     /**
      * Get a boolean value from the Capacitor config.
-     * @deprecated use {@link PluginConfig#getBoolean(String, boolean)} to access plugin config
-     * values. For main Capacitor config values, use the appropriate getter.
      *
-     * @param key A key to fetch from the config
+     * @param key          A key to fetch from the config
      * @param defaultValue A default value to return if the key does not exist in the config
      * @return The value from the config, if key exists. Default value returned if not
+     * @deprecated use {@link PluginConfig#getBoolean(String, boolean)} to access plugin config
+     * values. For main Capacitor config values, use the appropriate getter.
      */
     @Deprecated
     public boolean getBoolean(String key, boolean defaultValue) {
@@ -454,12 +478,12 @@ public class CapConfig {
 
     /**
      * Get an integer value from the Capacitor config.
-     * @deprecated use {@link PluginConfig#getInt(String, int)}  to access the plugin config
-     * values. For main Capacitor config values, use the appropriate getter.
      *
-     * @param key A key to fetch from the config
+     * @param key          A key to fetch from the config
      * @param defaultValue A default value to return if the key does not exist in the config
      * @return The value from the config, if key exists. Default value returned if not
+     * @deprecated use {@link PluginConfig#getInt(String, int)}  to access the plugin config
+     * values. For main Capacitor config values, use the appropriate getter.
      */
     @Deprecated
     public int getInt(String key, int defaultValue) {
@@ -468,11 +492,11 @@ public class CapConfig {
 
     /**
      * Get a string array value from the Capacitor config.
-     * @deprecated use {@link PluginConfig#getArray(String)}  to access the plugin config
-     * values. For main Capacitor config values, use the appropriate getter.
      *
      * @param key A key to fetch from the config
      * @return The value from the config, if exists. Null if not
+     * @deprecated use {@link PluginConfig#getArray(String)}  to access the plugin config
+     * values. For main Capacitor config values, use the appropriate getter.
      */
     @Deprecated
     public String[] getArray(String key) {
@@ -481,12 +505,12 @@ public class CapConfig {
 
     /**
      * Get a string array value from the Capacitor config.
-     * @deprecated use {@link PluginConfig#getArray(String, String[])}  to access the plugin
-     * config values. For main Capacitor config values, use the appropriate getter.
      *
-     * @param key A key to fetch from the config
+     * @param key          A key to fetch from the config
      * @param defaultValue A default value to return if the key does not exist in the config
      * @return The value from the config, if key exists. Default value returned if not
+     * @deprecated use {@link PluginConfig#getArray(String, String[])}  to access the plugin
+     * config values. For main Capacitor config values, use the appropriate getter.
      */
     @Deprecated
     public String[] getArray(String key, String[] defaultValue) {
